@@ -1,4 +1,0 @@
-﻿  deviceQuery.cpp
-     Bibliothek "../../../bin/win64/Debug/deviceQuery.lib" und Objekt "../../../bin/win64/Debug/deviceQuery.exp" werden erstellt.
-LINK : warning LNK4098: Standardbibliothek "LIBCMT" steht in Konflikt mit anderen Bibliotheken; /NODEFAULTLIB:Bibliothek verwenden.
-  deviceQuery_vs2022.vcxproj -> C:\Users\jonie\Desktop\hausarbeit\cuda-samples\bin\win64\Debug\deviceQuery.exe
