@@ -69,10 +69,10 @@ vector<pair<double, double>> parseTSPFile(const string& filenameshort) {
 
 class ac {
     private:
-        vector<vector<double>> cost;
-        vector<vector<double>> d_cost;
-        vector<vector<double>> phero;
-        vector<vector<double>> nextphero;
+        double *cost;
+        double *d_cost;
+        double *phero;
+        double *nextphero;
         vector<pair<double, double>> cl;
         int cldim;
         double alpha;
@@ -88,19 +88,25 @@ class ac {
         int block_size;
         int blocks;
         void generateMatrixes() {
-            cost.resize(cldim, vector<double>(cldim, 0));
+            cost = (double *)malloc((cldim*cldim)*sizeof(double));
             for (int x = 0; x < cldim; x++) {
                 for (int y = x+1; y < cldim; y++) {
                     double way = round(sqrt(pow(cl[x].first - cl[y].first, 2) + pow(cl[x].second - cl[y].second, 2)));
-                    cost[x][y] = way;
-                    cost[y][x] = way;
+                    cost[x*cldim+y] = way;
+                    cost[y*cldim+x] = way;
                 }
             }
-            phero.resize(cldim, vector<double>(cldim, 1));
+            for (int x = 0; x < cldim; x++) cost[x*cldim+x] = 0;
+            phero = (double *)malloc((cldim*cldim)*sizeof(double));
             for (int x = 0; x < cldim; x++) {
-                phero[x][x] = 0;
+                for (int y = x+1; y < cldim; y++) { // prüfen ob starten komplett mit 0 etwas ändert
+                    phero[x*cldim+y] = 1;
+                    phero[y*cldim+x] = 1;
+                }
             }
-            nextphero.resize(cldim, vector<double>(cldim, 0));
+            for (int x = 0; x < cldim; x++) phero[x*cldim+x] = 0;
+            nextphero = (double *)malloc((cldim*cldim)*sizeof(double));
+            for (int x = 0; x < cldim*cldim; x++) nextphero[x] = 0;
             for (int i = 0; i < cldim; i++) {
                 bestwaysofar.push_back(i);
             }
@@ -126,7 +132,7 @@ class ac {
                 vector<double> probabilities(cldim, 0);
                 for (int j = 0; j < cldim; j++) {
                     if (!visited[j]) {
-                        probabilities[j] += pow(phero[current][j]+0.1E-200, alpha) * pow(1/cost[current][j], beta);
+                        probabilities[j] += pow(phero[current*cldim+j]+0.1E-200, alpha) * pow(1/cost[current*cldim+j], beta);
                         sum += probabilities[j];
                     }
                 }
@@ -193,26 +199,26 @@ class ac {
             }
             double nlen = 1/len;
             for (int i = 0; i < cldim-1; i++) {
-                nextphero[route[i]][route[i+1]] += nlen;
-                nextphero[route[i+1]][route[i]] += nlen;
+                nextphero[route[i]*cldim+route[i+1]] += nlen;
+                nextphero[route[i+1]*cldim+route[i]] += nlen;
             }
-            nextphero[route[cldim-1]][route[0]] += nlen;
-            nextphero[route[0]][route[cldim-1]] += nlen;
+            nextphero[route[cldim-1]*cldim+route[0]] += nlen;
+            nextphero[route[0]*cldim+route[cldim-1]] += nlen;
         }
         void phermoneupdate(double p) {
             for (int i = 0; i < cldim; i++) {
                 for (int j = 0; j < cldim; j++) {
-                    phero[i][j] = (1-p) * phero[i][j] + nextphero[i][j];
-                    nextphero[i][j] = 0;
+                    phero[i*cldim+j] = (1-p) * phero[i*cldim+j] + nextphero[i*cldim+j];
+                    nextphero[i*cldim+j] = 0;
                 }
             }
         }
         double calulate_way_from_route(vector<int> route) {
             double way = 0;
             for (int i = 0; i < cldim-1; i++) {
-                way += cost[route[i]][route[i+1]];
+                way += cost[route[i]*cldim+route[i+1]];
             }
-            way += cost[route[cldim-1]][route[0]];
+            way += cost[route[cldim-1]*cldim+route[0]];
             return way;
         }
     public:
@@ -237,10 +243,22 @@ class ac {
             phermoneupdate(p);
         }
         vector<vector<double>> getcost() {
-            return cost;
+            vector<vector<double>> resultmatrix (cldim, vector<double>(cldim));
+            for (int i = 0; i < cldim; i++) {
+                for (int j = 0; j < cldim; j++) {
+                    resultmatrix[i][j] = cost[i * cldim + j];
+                }
+            }
+            return resultmatrix;
         }
         vector<vector<double>> getphero() {
-            return phero;
+            vector<vector<double>> resultmatrix (cldim, vector<double>(cldim));
+            for (int i = 0; i < cldim; i++) {
+                for (int j = 0; j < cldim; j++) {
+                    resultmatrix[i][j] = phero[i * cldim + j];
+                }
+            }
+            return resultmatrix;
         }
         vector<int> getbestroute() {
             return bestwaysofar;
