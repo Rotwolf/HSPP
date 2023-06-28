@@ -1,0 +1,5 @@
+.vscode/
+.cuda-samples/
+*.exe
+*.exp
+*.lib
