@@ -16,19 +16,95 @@ using namespace std;
 
 __global__ void setup_kernel(curandState *state, int N){
 
-  int idx = threadIdx.x+blockDim.x*blockIdx.x;
-  for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-    curand_init(4444, j, 0, &state[j]);
-  }
+    int idx = threadIdx.x+blockDim.x*blockIdx.x;
+    for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
+        curand_init(4444, j, 0, &state[j]);
+    }
 }
 
-__global__ void generate_kernel(curandState *my_curandstate, int N, double *result){
+__global__ void generate_kernel(
+    curandState *my_curandstate, 
+    int N, 
+    int cldim, 
+    double alpha,
+    double beta,
+    double *cost, 
+    double *phero,
+    int *d_route
+    ) {
 
-  int idx = threadIdx.x + blockDim.x*blockIdx.x;
+    int idx = threadIdx.x + blockDim.x*blockIdx.x;
   
-  for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
+    for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
+        int *route = (int *)malloc(cldim*sizeof(int));
+        bool* visited = new bool[cldim]();
+        for (int i = 0; i < cldim; i++) visited[i] = false;
+        double myrandstart = curand_uniform_double(my_curandstate+idx);
+        myrandstart *= (cldim -1 +0.99999999);
+        int start = (int)truncf(myrandstart);
+        route[0] = start;
+        visited[start] = true;
+        for (int i = 1; i < cldim-1; i++) {
+            int current = route[i-1];
+            double sum = 0;
+            double* probabilities = new double[cldim]();
+            for (int j = 0; j < cldim; j++) {
+                if (!visited[j]) {
+                    probabilities[j] = pow(phero[current*cldim+j]+0.1E-200, alpha) * pow(1/cost[current*cldim+j], beta);
+                    sum += probabilities[j];
+                }
+            }
+            for (int j = 0; j < cldim; j++) {
+                if (!visited[j]) {
+                    probabilities[j] /= sum;
+                    /*if (isnan(probabilities[j])) {
+                        cout << "it is nan: " << endl; 
+                        cout << "phero: " << phero[current][j] << endl;
+                        cout << "cost: " << cost[current][j] << endl;
+                        cout << "sum: " << sum << endl;
+                    }*/
+                }
+            }
+            double r = curand_uniform_double(my_curandstate+idx);
+            //For (0,1]
+            double sum_prob = 0;
+            int next = -1;
+            for (int j = 0; j < cldim; j++) {
+                sum_prob += probabilities[j];
+                if (r <= sum_prob) {
+                    next = j;
+                    break;
+                }
+            }
+            /*//For [0,1)
+            double sum_prob = 1;
+            int next = -1;
+            for (int j = 0; j < cldim; j++) {
+                sum_prob -= probabilities[j];
+                if (r >= sum_prob) {
+                    next = j;
+                    break;
+                }
+            }
+            */
+            //if (next == -1) { 
+                //add error msg? 
+            //}
+            free(probabilities);
 
-  }
+            route[i] = next;
+            visited[next] = true;
+        }
+        int i = 0;
+        while (visited[i]) i++;
+        route[cldim-1] = i;
+        visited[i] = true;
+
+        for (int i = 0; i < cldim; i++) d_route[idx*cldim+i] = route[i];
+
+        free(route);
+        free(visited);
+    }
 }
 
 vector<pair<double, double>> parseTSPFile(const string& filenameshort) {
@@ -72,7 +148,9 @@ class ac {
         double *cost;
         double *d_cost;
         double *phero;
+        double *d_phero;
         double *nextphero;
+        int *d_route;
         vector<pair<double, double>> cl;
         int cldim;
         double alpha;
@@ -115,95 +193,47 @@ class ac {
         void setupCuda() {
             cudaMalloc(&d_state, N*sizeof(curandState));
             block_size = 32;
-            blocks = (N / block_size);
+            blocks = (N / block_size)+1; // without +1 nothing works????????????
             setup_kernel<<<blocks,block_size>>>(d_state, N);
 
-            //cudaMalloc(d_cost, cldim*cldim*sizeof(double));
+            cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(double));
+            cudaMemcpy(d_cost, cost, cldim*cldim*sizeof(double), cudaMemcpyHostToDevice);
+            cudaMalloc((void **) &d_phero, cldim*cldim*sizeof(double));
+            cudaMalloc((void **) &d_route, N*cldim*sizeof(int));
+            
         }
-        void oneanttourconstruction() {
-            vector<int> route;
-            vector<bool> visited(cldim, false);
-            int start = rand() % cldim;
-            route.push_back(start);
-            visited[start] = true;
-            for (int i = 1; i < cldim-1; i++) {
-                int current = route.back();
-                double sum = 0;
-                vector<double> probabilities(cldim, 0);
-                for (int j = 0; j < cldim; j++) {
-                    if (!visited[j]) {
-                        probabilities[j] += pow(phero[current*cldim+j]+0.1E-200, alpha) * pow(1/cost[current*cldim+j], beta);
-                        sum += probabilities[j];
-                    }
-                }
-                for (int j = 0; j < cldim; j++) {
-                    if (!visited[j]) {
-                        probabilities[j] /= sum;
-                        /*if (isnan(probabilities[j])) {
-                            cout << "it is nan: " << endl; 
-                            cout << "phero: " << phero[current][j] << endl;
-                            cout << "cost: " << cost[current][j] << endl;
-                            cout << "sum: " << sum << endl;
-                        }*/
-                    }
-                }
-                double r = generate_canonical<double, numeric_limits<double>::digits>(gen); // generates [0,1)
-                /*
-                //For (0,1]
-                double sum_prob = 0;
-                int next = -1;
-                for (int j = 0; j < cldim; j++) {
-                    sum_prob += probabilities[j];
-                    if (r <= sum_prob) {
-                        next = j;
-                        break;
-                    }
-                }
-                */
-                double sum_prob = 1;
-                int next = -1;
-                for (int j = 0; j < cldim; j++) {
-                    sum_prob -= probabilities[j];
-                    if (r >= sum_prob) {
-                        next = j;
-                        break;
-                    }
-                }
-                if (next == -1) { 
-                    cout << "- Error -" << endl;
-                    cout << "r: " << r << endl;
-                    cout << "sum_prob: " << sum_prob << endl;
-                    cout << "probabilities: ";
-                    for (const auto& element : probabilities) {
-                        cout << element << " ";
-                    }
-                    cout << endl;
-                    cerr << "next=-1";
-                }
-                route.push_back(next);
-                visited[next] = true;
-            }
-            int i = 0;
-            while (visited[i]) i++;
-            route.push_back(i);
-            visited[i] = true;
+        void tourconstruction() {
+            
+            int *route = (int *)malloc((N*cldim)*sizeof(int));
 
-            double len = calulate_way_from_route(route);
-            if (len < lenofbestwaysofar) {
-                bestwaysofar = route;
-                lenofbestwaysofar = len;
-                if (lenofbestwaysofar == lenofbestway) {
-                    solisopt = true;
-                    return;
+            cudaMemcpy(d_phero, phero, cldim*cldim*sizeof(double), cudaMemcpyHostToDevice);
+            //kernel call
+            generate_kernel<<<blocks,block_size>>>(d_state, N, cldim, alpha, beta, d_cost, d_phero, d_route);
+            cudaMemcpy(route, d_route, (N*cldim)*sizeof(int), cudaMemcpyDeviceToHost);
+
+            for (int j = 0; j < N; j++) {
+                vector<int> vroute;
+                for (int i = 0; i < cldim; i++) {
+                    vroute.push_back(route[j * cldim + i]);
                 }
+                double len = calulate_way_from_route(vroute);
+                if (len < lenofbestwaysofar) {
+                    bestwaysofar = vroute;
+                    lenofbestwaysofar = len;
+                    if (lenofbestwaysofar == lenofbestway) {
+                        solisopt = true;
+                        return;
+                    }
+                }
+                double nlen = 1/len;
+                for (int i = 0; i < cldim-1; i++) {
+                    nextphero[vroute[i]*cldim+vroute[i+1]] += nlen;
+                    nextphero[vroute[i+1]*cldim+vroute[i]] += nlen;
+                }
+                nextphero[vroute[cldim-1]*cldim+vroute[0]] += nlen;
+                nextphero[vroute[0]*cldim+vroute[cldim-1]] += nlen;    
             }
-            double nlen = 1/len;
-            for (int i = 0; i < cldim-1; i++) {
-                nextphero[route[i]*cldim+route[i+1]] += nlen;
-                nextphero[route[i+1]*cldim+route[i]] += nlen;
-            }
-            nextphero[route[cldim-1]*cldim+route[0]] += nlen;
-            nextphero[route[0]*cldim+route[cldim-1]] += nlen;
+            free(route);
         }
         void phermoneupdate(double p) {
             for (int i = 0; i < cldim; i++) {
@@ -236,10 +266,8 @@ class ac {
             setupCuda();
         }
         void doIteration(double p=0.5) {
-            for (int i = 0; i < N; i++) { // kernel call
-                oneanttourconstruction();
-                if (solisopt) return;
-            }
+            tourconstruction();
+            if (solisopt) return;
             phermoneupdate(p);
         }
         vector<vector<double>> getcost() {
@@ -271,6 +299,7 @@ class ac {
         }
         void freeCuda(void) {
             cudaFree(d_state);
+            cudaFree(d_cost);
         }
 };
 
@@ -308,7 +337,7 @@ int main(void) {
     int bestroutlen = INT_MAX;
     int newbestroutlen;
     int lastbestroutechange = 0;
-    ac region(dj38, soldj38);
+    ac region(qa194, solqa194, 2000);
 
     auto start = chrono::high_resolution_clock::now();
 
