@@ -14,11 +14,11 @@
 
 using namespace std;
 
-__global__ void setup_kernel(curandState *state, int N){
+__global__ void setup_kernel(curandState *state, int N, unsigned long long seed){
 
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        curand_init(4444, j, 0, &state[j]);
+        curand_init(seed, j, 0, &state[j]);
     }
 }
 
@@ -165,6 +165,7 @@ class ac {
         int N;
         int block_size;
         int blocks;
+        unsigned long long seed;
         void generateMatrixes() {
             cost = (double *)malloc((cldim*cldim)*sizeof(double));
             for (int x = 0; x < cldim; x++) {
@@ -193,8 +194,8 @@ class ac {
         void setupCuda() {
             cudaMalloc(&d_state, N*sizeof(curandState));
             block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32
-            blocks = (N / block_size)+1; // without +1 nothing works, becauce its not clean dividable
-            setup_kernel<<<blocks,block_size>>>(d_state, N);
+            blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
+            setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
             cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(double));
             cudaMemcpy(d_cost, cost, cldim*cldim*sizeof(double), cudaMemcpyHostToDevice);
@@ -252,7 +253,7 @@ class ac {
             return way;
         }
     public:
-        ac(vector<pair<double, double>> citylist, double lenofbestroute=0, int anzAnts=2000) : gen(rd()) {
+        ac(vector<pair<double, double>> citylist, double lenofbestroute=0, int anzAnts=2048) : gen(rd()) {
             cl = citylist;
             cldim = citylist.size();
             alpha = 1;
@@ -261,6 +262,8 @@ class ac {
             lenofbestway = lenofbestroute;
             solisopt = false;
             N = anzAnts;
+            seed = time(NULL);
+            cout << seed << endl;
 
             generateMatrixes();
             setupCuda();
@@ -337,7 +340,7 @@ int main(void) {
     int bestroutlen = INT_MAX;
     int newbestroutlen;
     int lastbestroutechange = 0;
-    ac region(d198, sold198, 2000);
+    ac region(dj38, soldj38, 2000); //8192,4096,2048,1024
 
     auto start = chrono::high_resolution_clock::now();
 
