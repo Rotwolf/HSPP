@@ -192,8 +192,8 @@ class ac {
         }
         void setupCuda() {
             cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 32;
-            blocks = (N / block_size)+1; // without +1 nothing works????????????
+            block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32
+            blocks = (N / block_size)+1; // without +1 nothing works, becauce its not clean dividable
             setup_kernel<<<blocks,block_size>>>(d_state, N);
 
             cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(double));
@@ -337,7 +337,7 @@ int main(void) {
     int bestroutlen = INT_MAX;
     int newbestroutlen;
     int lastbestroutechange = 0;
-    ac region(qa194, solqa194, 2000);
+    ac region(d198, sold198, 2000);
 
     auto start = chrono::high_resolution_clock::now();
 
