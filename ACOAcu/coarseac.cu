@@ -257,13 +257,13 @@ class ac {
             cl = citylist;
             cldim = citylist.size();
             alpha = 1;
-            beta = 1;
+            beta = 2;
             lenofbestwaysofar = 0;
             lenofbestway = lenofbestroute;
             solisopt = false;
             N = anzAnts;
             seed = time(NULL);
-            cout << seed << endl;
+            //cout << seed << endl;
 
             generateMatrixes();
             setupCuda();
@@ -336,56 +336,72 @@ int main(void) {
     vector<pair<double, double>> rat783 = parseTSPFile("rat783");;
     double solrat783 = 8806;
 
-    vector<int> bestrout;
-    int bestroutlen = INT_MAX;
-    int newbestroutlen;
-    int lastbestroutechange = 0;
-    ac region(dj38, soldj38, 2000); //8192,4096,2048,1024
+    vector<chrono::duration<double>> listofdurations;
+    int anzberechungen = 30;
+    listofdurations.resize(anzberechungen); 
 
-    auto start = chrono::high_resolution_clock::now();
+    for (int j = 0; j < anzberechungen; j++) {
+        vector<int> bestrout;
+        int bestroutlen = INT_MAX;
+        int newbestroutlen;
+        int lastbestroutechange = 0;
+        ac region(dj38, soldj38, 2000); //8192,4096,2048,1024
 
-    int i = -1;
-    while (!region.issolopt() && lastbestroutechange<500) {
-        i++;
-        cout <<  i << endl; 
-        newbestroutlen = region.getbestroutelen();
-        cout << "bestroutlen: " << newbestroutlen << endl;
-        if (newbestroutlen < bestroutlen) {
-            bestroutlen = newbestroutlen;
-            lastbestroutechange = 0;
-        } else {
-            lastbestroutechange++;
+        auto start = chrono::high_resolution_clock::now();
+
+        int i = -1;
+        while (!region.issolopt() && lastbestroutechange<500) {
+            i++;
+            //cout <<  i << endl; 
+            newbestroutlen = region.getbestroutelen();
+            //cout << "bestroutlen: " << newbestroutlen << endl;
+            if (newbestroutlen < bestroutlen) {
+                bestroutlen = newbestroutlen;
+                lastbestroutechange = 0;
+            } else {
+                lastbestroutechange++;
+            }
+            //cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
+            bestrout = region.getbestroute();
+            //cout << "bestroute: [";
+            for (const auto& element : bestrout) {
+                //cout << element << ", ";
+            }
+            //cout << endl;
+            region.doIteration(0.5);
         }
-        cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
+        /*
+        bestroutlen = region.getbestroutelen();
+        cout << "bestroutelen: " << bestroutlen << endl;
         bestrout = region.getbestroute();
         cout << "bestroute: [";
         for (const auto& element : bestrout) {
             cout << element << ", ";
         }
         cout << endl;
-        region.doIteration(0.5);
-    }
+        cout << "sorted bestroute: ";
+        sort(bestrout.begin(), bestrout.end());
+        for (const auto& element : bestrout) {
+            cout << element << " ";
+        }
+        cout << endl;
+        */
+        region.freeCuda();
+        
+        auto end = chrono::high_resolution_clock::now();
+        listofdurations[j] = end - start;
 
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double> duration = end - start;
-    cout << "Die Ausfuehrungszeit betraegt: " << duration.count() << " Sekunden." << endl;
-    bestroutlen = region.getbestroutelen();
-    cout << "bestroutelen: " << bestroutlen << endl;
-    bestrout = region.getbestroute();
-    cout << "bestroute: [";
-    for (const auto& element : bestrout) {
-        cout << element << ", ";
+        cout << "[" << j+1 << "/" << anzberechungen << "]" << endl;
     }
-    cout << endl;
-    cout << "sorted bestroute: ";
-    sort(bestrout.begin(), bestrout.end());
-    for (const auto& element : bestrout) {
-        cout << element << " ";
+    
+    double summe = 0.0;
+    for (int i = 0; i < anzberechungen; i++) {
+        summe += listofdurations[i].count();
     }
-    cout << endl;
-
-    region.freeCuda();
+    
+    double avg = summe / listofdurations.size();
+    cout << "Die Durchschnittliche Ausfuehrungszeit betraegt: " << avg << " Sekunden." << endl;
 
     return 0;
-}
+}   
 
