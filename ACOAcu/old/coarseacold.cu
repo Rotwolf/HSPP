@@ -18,7 +18,7 @@ __global__ void setup_kernel(curandState *state, int N, unsigned long long seed)
 
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        curand_init(seed, j, 0, &state[j]);                   // inizialisiert in jedem Thread einen eigenen Zufallszahlengenerator
+        curand_init(seed, j, 0, &state[j]);                   // inizialisiert in jedem Thread einen eigenen ZUfallszahlengenerator
     }
 }
 
@@ -50,7 +50,7 @@ __global__ void tour_konstruktions_kernel(
             double* probabilities = new double[cldim]();
             for (int j = 0; j < cldim; j++) {
                 if (!visited[j]) {
-                    probabilities[j] = __powf(phero[current*cldim+j]+0.1E-30, alpha) * __powf(1/cost[current*cldim+j], beta);
+                    probabilities[j] = pow(phero[current*cldim+j]+0.1E-300, alpha) * pow(1/cost[current*cldim+j], beta);
                     sum += probabilities[j];
                 }
             }
@@ -242,7 +242,7 @@ class ac {
         }
         void initialisiereGPU() {
             cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32, 16 ist warum auch immer schneller
+            block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32
             blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
             setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
@@ -371,7 +371,7 @@ int main(void) {
     double solrat783 = 8806;
 
     vector<chrono::duration<double>> listofdurations;
-    int anzberechungen = 30;
+    int anzberechungen = 1;
     int maxlastbestroutechange = 2000;
     listofdurations.resize(anzberechungen); 
 
@@ -380,8 +380,7 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(dj38, soldj38, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        //ac region(qa194, solqa194, 2048);
+        ac region(qa194, solqa194, 1024); //8192,4096,2048,1024  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
         //ac region(cl1, 2846);
 
         auto start = chrono::high_resolution_clock::now();
