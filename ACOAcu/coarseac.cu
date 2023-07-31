@@ -50,19 +50,13 @@ __global__ void generate_kernel(
             double* probabilities = new double[cldim]();
             for (int j = 0; j < cldim; j++) {
                 if (!visited[j]) {
-                    probabilities[j] = pow(phero[current*cldim+j]+0.1E-200, alpha) * pow(1/cost[current*cldim+j], beta);
+                    probabilities[j] = pow(phero[current*cldim+j]+0.1E-300, alpha) * pow(1/cost[current*cldim+j], beta);
                     sum += probabilities[j];
                 }
             }
             for (int j = 0; j < cldim; j++) {
                 if (!visited[j]) {
                     probabilities[j] /= sum;
-                    /*if (isnan(probabilities[j])) {
-                        cout << "it is nan: " << endl; 
-                        cout << "phero: " << phero[current][j] << endl;
-                        cout << "cost: " << cost[current][j] << endl;
-                        cout << "sum: " << sum << endl;
-                    }*/
                 }
             }
             double r = curand_uniform_double(my_curandstate+idx);
@@ -177,13 +171,16 @@ class ac {
             }
             for (int x = 0; x < cldim; x++) cost[x*cldim+x] = 0;
             phero = (double *)malloc((cldim*cldim)*sizeof(double));
+            for (int x = 0; x < cldim*cldim; x++) phero[x] = 0;
+            /*
             for (int x = 0; x < cldim; x++) {
-                for (int y = x+1; y < cldim; y++) { // prüfen ob starten komplett mit 0 etwas ändert
-                    phero[x*cldim+y] = 1;
-                    phero[y*cldim+x] = 1;
+                for (int y = x+1; y < cldim; y++) { // prüfen ob starten komplett mit 0 etwas ändert : ähhh ja, viel besser als 1
+                    phero[x*cldim+y] = 0;
+                    phero[y*cldim+x] = 0;
                 }
             }
             for (int x = 0; x < cldim; x++) phero[x*cldim+x] = 0;
+            */
             nextphero = (double *)malloc((cldim*cldim)*sizeof(double));
             for (int x = 0; x < cldim*cldim; x++) nextphero[x] = 0;
             for (int i = 0; i < cldim; i++) {
@@ -337,7 +334,7 @@ int main(void) {
     double solrat783 = 8806;
 
     vector<chrono::duration<double>> listofdurations;
-    int anzberechungen = 1;
+    int anzberechungen = 120;
     listofdurations.resize(anzberechungen); 
 
     for (int j = 0; j < anzberechungen; j++) {
@@ -345,24 +342,25 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(qa194, solqa194, 2048); //8192,4096,2048,1024  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        ac region(dj38, soldj38, 2048); //8192,4096,2048,1024  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
 
         auto start = chrono::high_resolution_clock::now();
 
         int i = -1;
-        while (!region.issolopt() && lastbestroutechange<1000) {
+        while (!region.issolopt() && lastbestroutechange<2000) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
-            cout << "bestroutlen: " << newbestroutlen << endl;
+            //cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
             } else {
                 lastbestroutechange++;
             }
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
             cout << "bestroute: [";
@@ -370,6 +368,7 @@ int main(void) {
                 cout << element << ", ";
             }
             cout << endl;
+            */
             if (lastbestroutechange >= 1000) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }
