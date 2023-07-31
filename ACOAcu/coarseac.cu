@@ -337,7 +337,7 @@ int main(void) {
     double solrat783 = 8806;
 
     vector<chrono::duration<double>> listofdurations;
-    int anzberechungen = 30;
+    int anzberechungen = 1;
     listofdurations.resize(anzberechungen); 
 
     for (int j = 0; j < anzberechungen; j++) {
@@ -345,30 +345,34 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(dj38, soldj38, 2000); //8192,4096,2048,1024
+        ac region(qa194, solqa194, 2048); //8192,4096,2048,1024  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
 
         auto start = chrono::high_resolution_clock::now();
 
         int i = -1;
-        while (!region.issolopt() && lastbestroutechange<500) {
+        while (!region.issolopt() && lastbestroutechange<1000) {
             i++;
-            //cout <<  i << endl; 
+            cout <<  i << endl; 
+            region.doIteration(0.5);
+
             newbestroutlen = region.getbestroutelen();
-            //cout << "bestroutlen: " << newbestroutlen << endl;
+            cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
             } else {
                 lastbestroutechange++;
             }
-            //cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
+            cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
-            //cout << "bestroute: [";
+            cout << "bestroute: [";
             for (const auto& element : bestrout) {
-                //cout << element << ", ";
+                cout << element << ", ";
             }
-            //cout << endl;
-            region.doIteration(0.5);
+            cout << endl;
+            if (lastbestroutechange >= 1000) {
+                cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
+            }
         }
         /*
         bestroutlen = region.getbestroutelen();
