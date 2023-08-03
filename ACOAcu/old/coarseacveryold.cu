@@ -190,7 +190,7 @@ class ac {
         }
         void setupCuda() {
             cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32
+            block_size = 8; // bei dj38 eine halbe sekunde langsamer mit 32
             blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
             setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
@@ -352,18 +352,18 @@ int main(void) {
         int i = -1;
         while (!region.issolopt() && lastbestroutechange<2000) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
-            cout << "bestroutlen: " << newbestroutlen << endl;
+            //cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
             } else {
                 lastbestroutechange++;
             }
-            
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
             cout << "bestroute: [";
@@ -371,7 +371,7 @@ int main(void) {
                 cout << element << ", ";
             }
             cout << endl;
-            
+            */
             if (lastbestroutechange >= 2000) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }

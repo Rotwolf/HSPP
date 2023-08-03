@@ -36,12 +36,12 @@ __global__ void tour_konstruktions_kernel(
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
   
     for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        int *route = (int *)malloc(cldim*sizeof(int));
-        bool* visited = new bool[cldim]();
+        int *route = (int *)malloc(cldim*sizeof(int));              // shared memmory nutzen
+        bool* visited = new bool[cldim]();                          // shared memmory nutzen
         for (int i = 0; i < cldim; i++) visited[i] = false;
         double myrandstart = curand_uniform_double(my_curandstate+idx);
         myrandstart *= (cldim -1 +0.99999999);
-        int start = (int)truncf(myrandstart);
+        int start = (int)trunc(myrandstart);
         route[0] = start;
         visited[start] = true;
         for (int i = 1; i < cldim-1; i++) {
@@ -242,7 +242,7 @@ class ac {
         }
         void initialisiereGPU() {
             cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 16; // bei dj38 eine halbe sekunde langsamer mit 32, 16 ist warum auch immer schneller
+            block_size = 8; // bei dj38 eine halbe sekunde langsamer mit 32, 8 ist warum auch immer schneller
             blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
             setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
@@ -372,7 +372,9 @@ int main(void) {
 
     vector<chrono::duration<double>> listofdurations;
     int anzberechungen = 30;
-    int maxlastbestroutechange = 2000;
+    int maxlastbestroutechange = 3000;
+    vector<pair<double, double>> citylits = dj38;
+    double lenofbesttour = soldj38;
     listofdurations.resize(anzberechungen); 
 
     for (int j = 0; j < anzberechungen; j++) {
@@ -380,7 +382,7 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(dj38, soldj38, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
         //ac region(qa194, solqa194, 2048);
         //ac region(cl1, 2846);
 
@@ -389,26 +391,28 @@ int main(void) {
         int i = -1;
         while (!region.issolopt() && lastbestroutechange<maxlastbestroutechange) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
-            cout << "bestroutlen: " << newbestroutlen << endl;
+            //cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
             } else {
                 lastbestroutechange++;
             }
-            
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
-            cout << "bestroute: [";
-            for (const auto& element : bestrout) {
-                cout << element << ", ";
+            if ( true) { // newbestroutlen < lenofbesttour
+                cout << "bestroute: [";
+                for (const auto& element : bestrout) {
+                    cout << element << ", ";
+                }
+                cout << endl;
             }
-            cout << endl;
-            
+            */
             if (lastbestroutechange >= maxlastbestroutechange) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }

@@ -60,18 +60,18 @@ cl4 = ((182,663),(232,33),(230,787),(370,676),(256,996),(600,247),(33,672),(119,
 solcl4 = [1, 7, 6, 0, 2, 4, 8, 3, 9, 5]
 """
 region = citys.citys()
-wasgenerationsucessfull = region.clearandautogenerate(100, dis=5)
+wasgenerationsucessfull = region.clearandautogenerate(20, dis=5)
 if not wasgenerationsucessfull:
     print("generation failed")
     exit()
 clist = region.getlist()
 """
-clist = qa194
-#bsol = bruteforce.brutforce(clist)
-#aco = antcolony.ac(clist)
-#aco.doIteration()
-#sol = aco.getbestroute()
-sol = solqa194e
+clist = dj38
+#sol = bruteforce.brutforce(clist)
+aco = antcolony.ac(clist)
+aco.doIteration()
+sol = aco.getbestroute()
+#sol = solqa194e
 
 min_x = min(point[0] for point in clist)
 max_x = max(point[0] for point in clist)
@@ -112,8 +112,8 @@ while running:
     pygame.draw.rect(screen, (255, 0, 0), pygame.Rect((i % 1000)+50, (i % 1000)+50, 40, 30))
     i += 1
 
-    #aco.doIteration(500)
-    #sol = aco.getbestroute()
+    aco.doIteration(500)
+    sol = aco.getbestroute()
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
