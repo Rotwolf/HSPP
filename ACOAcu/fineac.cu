@@ -16,9 +16,9 @@ using namespace std;
 
 __global__ void setup_kernel(curandState *state, int N, unsigned long long seed){
 
-    int idx = threadIdx.x+blockDim.x*blockIdx.x;
-    for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        curand_init(seed, j, 0, &state[j]);                   // inizialisiert in jedem Thread einen eigenen Zufallszahlengenerator
+    int ameisenid = blockIdx.x;
+    if (threadIdx.x == 0) {
+        curand_init(seed, ameisenid, 0, &state[ameisenid]);                   // inizialisiert in jedem Block einen eigenen Zufallszahlengenerator
     }
 }
 
@@ -33,72 +33,70 @@ __global__ void tour_konstruktions_kernel(
     int *d_route
     ) {
 
-    int idx = threadIdx.x + blockDim.x*blockIdx.x;
-  
-    for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        int *route = (int *)malloc(cldim*sizeof(int));              // evt. shared memmory nutzen
-        bool* visited = new bool[cldim]();                          // evt. shared memmory nutzen
+    int* route;
+    bool* visited;
+    float* probabilities;
+
+    int ameisenid = blockIdx.x;
+    int stadtid = threadIdx.x;
+
+    if (stadtid == 0) {
+        route = (int *)malloc(cldim*sizeof(int));                           // shared memmory nutzen?
+        visited = new bool[cldim]();                                        // shared memmory nutzen?
         for (int i = 0; i < cldim; i++) visited[i] = false;
-        float myrandstart = curand_uniform(my_curandstate+idx);
+        float myrandstart = curand_uniform(my_curandstate+ameisenid);
         myrandstart *= (cldim -1 +0.99999999);
         int start = (int)truncf(myrandstart);
         route[0] = start;
         visited[start] = true;
-        for (int i = 1; i < cldim-1; i++) {
-            int current = route[i-1];
-            float sum = 0;
-            float* probabilities = new float[cldim]();
+        probabilities = new float[cldim]();
+    }
+    __syncthreads();
+    for (int i = 1; i < cldim-1; i++) {
+        int aktuellestadt = route[i-1];
+        probabilities[stadtid] = __powf(phero[aktuellestadt*cldim+stadtid]+0.1E-30, alpha) * __powf(1/cost[aktuellestadt*cldim+stadtid], beta);
+        __syncthreads();
+        float sum;
+        if (stadtid == 0) {
+            sum = 0;
             for (int j = 0; j < cldim; j++) {
-                if (!visited[j]) {
-                    probabilities[j] = __powf(phero[current*cldim+j]+0.1E-30, alpha) * __powf(1/cost[current*cldim+j], beta);
-                    sum += probabilities[j];
-                }
+                if (!visited[j]) sum += probabilities[j];
             }
-            for (int j = 0; j < cldim; j++) {
-                if (!visited[j]) {
-                    probabilities[j] /= sum;
-                }
-            }
-            float r = curand_uniform(my_curandstate+idx);
+        }
+        __syncthreads();
+        probabilities[stadtid] /= sum;
+        __syncthreads();
+        if (stadtid == 0) {
+            float r = curand_uniform(my_curandstate+ameisenid);
             //For (0,1]
             float sum_prob = 0;
             int next = -1;
             for (int j = 0; j < cldim; j++) {
-                sum_prob += probabilities[j];
-                if (r <= sum_prob) {
-                    next = j;
-                    break;
+                if (!visited[j]) {
+                    sum_prob += probabilities[j];
+                    if (r <= sum_prob) {
+                        next = j;
+                        break;
+                    }
                 }
             }
-            /*//For [0,1)
-            float sum_prob = 1;
-            int next = -1;
-            for (int j = 0; j < cldim; j++) {
-                sum_prob -= probabilities[j];
-                if (r >= sum_prob) {
-                    next = j;
-                    break;
-                }
-            }
-            */
-            //if (next == -1) { 
-                //add error msg? 
-            //}
-            free(probabilities);
-
             route[i] = next;
-            visited[next] = true;
         }
+        __syncthreads();
+    }
+    
+    if (stadtid == 0) {
+        free(probabilities);
         int i = 0;
         while (visited[i]) i++;
         route[cldim-1] = i;
         //visited[i] = true;
-
-        for (int i = 0; i < cldim; i++) d_route[idx*cldim+i] = route[i];
-
+        for (int i = 0; i < cldim; i++) d_route[ameisenid*cldim+i] = route[i];
         free(route);
         free(visited);
     }
+
+
 }
 
 __global__ void pheromon_aktualisierungs_kernel(
@@ -242,8 +240,8 @@ class ac {
         }
         void initialisiereGPU() {
             cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 64; // bei dj38 eine halbe sekunde langsamer mit 32, 8 ist warum auch immer schneller
-            blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
+            block_size = cldim; 
+            blocks = N; 
             setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
             cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(float));
@@ -280,6 +278,15 @@ class ac {
             cout << "]" << endl << "phero: " << endl << "[";
             for (int i = 0; i < cldim*cldim; i++) {
                 cout << " " << phero[i] << ",";
+            }
+            cout << "]" << endl;
+            */
+            /*
+            int* route = (int *)malloc(N*cldim*sizeof(int));
+            cudaMemcpy(route, d_route, cldim*cldim*sizeof(float), cudaMemcpyDeviceToHost);
+            cout << "route: " << endl << "[";
+            for (int i = 0; i < N*cldim; i++) {
+                cout << " " << route[i] << ",";
             }
             cout << "]" << endl;
             */
