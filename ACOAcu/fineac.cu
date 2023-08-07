@@ -175,7 +175,7 @@ __global__ void tour_konstruktions_kernel(
                         }
                     }
                 }
-                if (next == -1) {
+                if (next == -1 && r > sum_prob) {       // prüft, ob das Problem die ungenauigkeit der Errechneten Wahrscheinlichkeiten ist.
                     int j = cldim-1;
                     while (visited[j]) j--;
                     next = j;
