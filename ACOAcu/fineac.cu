@@ -22,7 +22,7 @@ __global__ void setup_kernel(curandState *state, int N, unsigned long long seed)
     }
 }
 
-
+/*
 __global__ void tour_konstruktions_kernelR(
     curandState *my_curandstate, 
     int N, 
@@ -55,6 +55,24 @@ __global__ void tour_konstruktions_kernelR(
         __syncthreads();
         for (int i = 1; i < cldim-1; i++) {
             int aktuellestadt = route[i-1];
+
+            int anzvs = 0;
+            for (int j = 0; j < cldim; j++) {
+                if (visited[j]) anzvs++; 
+            }
+            if (anzvs != i) {
+                if (aktuellestadt == -1) {
+                    if (0==(int)truncf(sum*1000)) {
+                        route[stadtid] = -3;
+                    } else {
+                        route[stadtid] = (int)(sum*10); 
+                    }
+                } else {
+                    route[stadtid] = -2;
+                }
+                break;
+            }
+
             if (!visited[stadtid]) {
                 probabilities[stadtid] = __powf(phero[aktuellestadt*cldim+stadtid]+0.1E-30, alpha) * __powf(1/cost[aktuellestadt*cldim+stadtid], beta);
             } else {
@@ -82,16 +100,7 @@ __global__ void tour_konstruktions_kernelR(
                         break;
                     }
                 }
-                if (next == -1) {
-                    for (int j = 0; j < cldim; j++) {
-                        route[j] = 0;
-                    }
-                    route[0] = -1;
-                    route[1] = i;
-                    for (int j = 0; j < cldim; j++) {
-                        if (!visited[j]) route[3]++;
-                    }
-                }
+                if (next == -1) sum = r;
                 route[i] = next;
                 visited[next] = true;
             }
@@ -107,7 +116,7 @@ __global__ void tour_konstruktions_kernelR(
         }
     }
 }
-
+*/
 
 __global__ void tour_konstruktions_kernel(
     curandState *my_curandstate, 
@@ -165,6 +174,11 @@ __global__ void tour_konstruktions_kernel(
                             break;
                         }
                     }
+                }
+                if (next == -1) {
+                    int j = cldim-1;
+                    while (visited[j]) j--;
+                    next = j;
                 }
                 route[i] = next;
                 visited[next] = true;
@@ -473,7 +487,7 @@ int main(void) {
     float solrat783 = 8806;
 
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 1;
+    int anzberechungen = 30;
     int maxlastbestroutechange = 3000;
     vector<pair<float, float>> citylits = dj38;
     float lenofbesttour = soldj38;
@@ -484,8 +498,8 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        //ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        ac region(qa194, solqa194, 2048);
+        ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        //ac region(qa194, solqa194, 2048);
 
         auto start = chrono::high_resolution_clock::now();
 
