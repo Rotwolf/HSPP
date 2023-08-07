@@ -283,6 +283,15 @@ class ac {
             }
             cout << "]" << endl;
             */
+            /*
+            int* route = (int *)malloc(N*cldim*sizeof(int));
+            cudaMemcpy(route, d_route, N*cldim*sizeof(int), cudaMemcpyDeviceToHost);
+            cout << "route: " << endl << "[";
+            for (int i = 0; i < N*cldim; i++) {
+                cout << " " << route[i] << ",";
+            }
+            cout << "]" << endl;
+            */
         }
         float calulate_way_from_route(vector<int> route) {
             float way = 0;
