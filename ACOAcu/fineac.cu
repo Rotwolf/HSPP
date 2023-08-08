@@ -47,7 +47,7 @@ __global__ void tour_konstruktions_kernelR(
         if (stadtid == 0) {
             for (int i = 0; i < cldim; i++) visited[i] = false;
             float myrandstart = curand_uniform(my_curandstate+ameisenid);
-            myrandstart *= (cldim -1 +0.99999999);
+            myrandstart *= (cldim -1 +0.999999);
             int start = (int)truncf(myrandstart);
             route[0] = start;
             visited[start] = true;
@@ -142,7 +142,7 @@ __global__ void tour_konstruktions_kernel(
         if (stadtid == 0) {
             for (int i = 0; i < cldim; i++) visited[i] = false;
             float myrandstart = curand_uniform(my_curandstate+ameisenid);
-            myrandstart *= (cldim -1 +0.99999999);
+            myrandstart *= (cldim -1 +0.99999);
             int start = (int)truncf(myrandstart);
             route[0] = start;
             visited[start] = true;
@@ -212,7 +212,7 @@ __global__ void pheromon_aktualisierungs_kernel(
     }
 
     for (int antid = 0; antid < N; antid++) {
-        float len = 0;
+        int len = 0;
         for (int i = 0; i < cldim-1; i++) {
             len += cost[route[antid*cldim + i]*cldim+route[antid*cldim + i+1]];
         }
@@ -225,7 +225,7 @@ __global__ void pheromon_aktualisierungs_kernel(
             lenofbestwaysofar = len;
         }
 
-        float nlen = 1/len;
+        float nlen = 1./len;
 
         for (int i = 0; i < cldim-1; i++) {
             phero[route[antid*cldim + i]*cldim+route[antid*cldim + i+1]] += nlen;
@@ -487,7 +487,7 @@ int main(void) {
     float solrat783 = 8806;
 
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 30;
+    int anzberechungen = 1;
     int maxlastbestroutechange = 3000;
     vector<pair<float, float>> citylits = dj38;
     float lenofbesttour = soldj38;
@@ -498,15 +498,15 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        //ac region(qa194, solqa194, 2048);
+        //ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        ac region(qa194, solqa194, 1024);
 
         auto start = chrono::high_resolution_clock::now();
 
         int i = -1;
         while (!region.issolopt() && lastbestroutechange<maxlastbestroutechange) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
@@ -517,7 +517,7 @@ int main(void) {
             } else {
                 lastbestroutechange++;
             }
-            
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
             if ( true) { // newbestroutlen < lenofbesttour
@@ -527,12 +527,16 @@ int main(void) {
                 }
                 cout << endl;
             }
+            */
+            if (newbestroutlen > bestroutlen) {
+                break;
+            }
             
             if (lastbestroutechange >= maxlastbestroutechange) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }
         }
-        /*
+        
         bestroutlen = region.getbestroutelen();
         cout << "bestroutelen: " << bestroutlen << endl;
         bestrout = region.getbestroute();
@@ -541,6 +545,7 @@ int main(void) {
             cout << element << ", ";
         }
         cout << endl;
+        /*
         cout << "sorted bestroute: ";
         sort(bestrout.begin(), bestrout.end());
         for (const auto& element : bestrout) {

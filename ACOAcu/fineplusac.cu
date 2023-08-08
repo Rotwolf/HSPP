@@ -47,7 +47,7 @@ __global__ void tour_konstruktions_kernelR(
         if (stadtid == 0) {
             for (int i = 0; i < cldim; i++) visited[i] = false;
             float myrandstart = curand_uniform(my_curandstate+ameisenid);
-            myrandstart *= (cldim -1 +0.99999999);
+            myrandstart *= (cldim -1 +0.999999);
             int start = (int)truncf(myrandstart);
             route[0] = start;
             visited[start] = true;
@@ -142,7 +142,7 @@ __global__ void tour_konstruktions_kernel(
         if (stadtid == 0) {
             for (int i = 0; i < cldim; i++) visited[i] = false;
             float myrandstart = curand_uniform(my_curandstate+ameisenid);
-            myrandstart *= (cldim -1 +0.99999999);
+            myrandstart *= (cldim -1 +0.99999); // its very important that this is not even one 9 longer, since above .999999 the Computer would roud up, leading to an Error
             int start = (int)truncf(myrandstart);
             route[0] = start;
             visited[start] = true;
@@ -208,14 +208,14 @@ __global__ void pheromon_evaporation_kernel(
 
 __global__ void pheromon_aktualisierungs_kernel( 
     int cldim,
-    int lenofbestwaysofar,
-    int *bestroute,
+    int *lenlist,
     float *cost, 
     float *phero,
     int *route
     ) {
     extern __shared__ int partial_len[];
     __shared__ float pherodelta;
+
     int ameisenid = blockIdx.x;
     int schrittid = threadIdx.x;
     int stadt_i, stadt_j; 
@@ -230,15 +230,19 @@ __global__ void pheromon_aktualisierungs_kernel(
     partial_len[schrittid] = cost[stadt_i * cldim + stadt_j];
     __syncthreads();
     if (schrittid == 0) {
-        float len = 0;
+        int len = 0;
         for (int i = 0; i < cldim; i++) len += partial_len[i];
+        //write it down, analyse it later.
+        lenlist[ameisenid] = len; 
+        /*
         if (len < lenofbestwaysofar) {
             for (int i = 0; i < cldim; i++) {
-                bestroute[i] = route[ameisenid*cldim + i];
+                bestroute[i] = route[ameisenid*cldim + i];  // I'm a Problem
             }
             lenofbestwaysofar = len;
         }
-        pherodelta = 1/len;
+        */
+        pherodelta = 1./len;
     }
     __syncthreads();
     atomicAdd(&phero[stadt_i * cldim + stadt_j], pherodelta);
@@ -325,15 +329,16 @@ class ac {
         float *phero;
         float *d_phero;
         int *d_route;
-        int *d_bestwaysofar;
+        int *route;
+        int *d_lenlist;
+        int *lenlist;
         vector<pair<float, float>> cl;
         int cldim;
         float alpha;
         float beta;
-        int *bestwaysofar;
         vector<int> vbestwaysofar;
-        float lenofbestwaysofar;
-        float lenofbestway;
+        int lenofbestwaysofar;
+        int lenofbestway;
         bool solisopt;
         random_device rd;
         mt19937 gen;
@@ -374,9 +379,9 @@ class ac {
             }
             for (int x = 0; x < cldim; x++) phero[x*cldim+x] = 0;
             */
-            bestwaysofar = (int *)malloc(cldim*sizeof(int));
+            lenlist = (int *)malloc(N*sizeof(int));
+            route = (int *)malloc(N*cldim*sizeof(int));
             for (int i = 0; i < cldim; i++) {
-                bestwaysofar[i] = i;
                 vbestwaysofar.push_back(i);
             }
             lenofbestwaysofar = calulate_way_from_route(vbestwaysofar);
@@ -391,8 +396,7 @@ class ac {
             cudaMemcpy(d_cost, cost, cldim*cldim*sizeof(float), cudaMemcpyHostToDevice);
             cudaMalloc((void **) &d_phero, cldim*cldim*sizeof(float));
             cudaMemcpy(d_phero, phero, cldim*cldim*sizeof(float), cudaMemcpyHostToDevice);
-            cudaMalloc((void **) &d_bestwaysofar, cldim*sizeof(int));
-            cudaMemcpy(d_bestwaysofar, bestwaysofar, cldim*sizeof(int), cudaMemcpyHostToDevice);
+            cudaMalloc((void **) &d_lenlist, N*sizeof(int));
             cudaMalloc((void **) &d_route, N*cldim*sizeof(int));
         }
         void oneIteration(float p) {
@@ -401,18 +405,36 @@ class ac {
             cudaDeviceSynchronize();
             pheromon_evaporation_kernel<<<cldim, cldim>>>(p,d_phero);
             cudaDeviceSynchronize(); //?
-            pheromon_aktualisierungs_kernel<<<blocks, block_size, cldim*sizeof(int)>>>(cldim, lenofbestwaysofar, d_bestwaysofar, d_cost, d_phero, d_route);
-            cudaMemcpy(bestwaysofar, d_bestwaysofar, cldim*sizeof(int), cudaMemcpyDeviceToHost);
+            pheromon_aktualisierungs_kernel<<<blocks, block_size, cldim*sizeof(int)>>>(cldim, d_lenlist, d_cost, d_phero, d_route);
+            cudaMemcpy(lenlist, d_lenlist, N*sizeof(int), cudaMemcpyDeviceToHost);
 
-            vbestwaysofar.clear();
-            for (int i = 0; i < cldim; i++) {
-                vbestwaysofar.push_back(bestwaysofar[i]);
-            }
-            lenofbestwaysofar = calulate_way_from_route(vbestwaysofar);
-            if (lenofbestwaysofar <= lenofbestway) {
-                solisopt = true; 
+            int min = 0;
+            for (int i = 1; i < N; i++) if (lenlist[i] < lenlist[min]) min = i;
+
+            if (lenlist[min] < lenofbestwaysofar){
+                cudaMemcpy(route, d_route, N*cldim*sizeof(int), cudaMemcpyDeviceToHost);
+                vbestwaysofar.clear();
+                for (int i = 0; i < cldim; i++) {
+                    vbestwaysofar.push_back(route[min * cldim + i]);
+                }
+                lenofbestwaysofar = lenlist[min];
+                if (lenofbestwaysofar <= lenofbestway) {
+                    solisopt = true; 
+                }
+                /*
+                cout << "[Nullte len nach para]: " << lenlist[min] << endl;
+                cout << "[Nullte len nach seri]: " << calulate_way_from_route(vbestwaysofar) << endl;
+                */
             }
 
+            
+            /*
+            cout << "lenlist: " << endl << "[";
+            for (int i = 0; i < N; i++) {
+                cout << " " << lenlist[i] << ",";
+            }
+            cout << "]" << endl;
+            */
             /*
             cudaMemcpy(cost, d_cost, cldim*cldim*sizeof(float), cudaMemcpyDeviceToHost);
             cudaMemcpy(phero, d_phero, cldim*cldim*sizeof(float), cudaMemcpyDeviceToHost);
@@ -427,7 +449,6 @@ class ac {
             cout << "]" << endl;
             */
             /*
-            int* route = (int *)malloc(N*cldim*sizeof(int));
             cudaMemcpy(route, d_route, N*cldim*sizeof(int), cudaMemcpyDeviceToHost);
             for (int i = 0; i < N*cldim; i++) {
                 if (route[i] == -1){
@@ -445,11 +466,10 @@ class ac {
                 cout << " " << route[i] << ",";
             }
             cout << "]" << endl;
-            free(route);
             */
         }
-        float calulate_way_from_route(vector<int> route) {
-            float way = 0;
+        int calulate_way_from_route(vector<int> route) {
+            int way = 0;
             for (int i = 0; i < cldim-1; i++) {
                 way += cost[route[i]*cldim+route[i+1]];
             }
@@ -495,12 +515,12 @@ class ac {
         void freeall(void) {
             free(cost);
             free(phero);
-            free(bestwaysofar);
+            free(lenlist);
             cudaFree(d_state);
             cudaFree(d_cost);
             cudaFree(d_phero);
             cudaFree(d_route);
-            cudaFree(d_bestwaysofar);
+            cudaFree(d_lenlist);
         }
 };
 
@@ -535,8 +555,8 @@ int main(void) {
     float solrat783 = 8806;
 
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 30;
-    int maxlastbestroutechange = 3000;
+    int anzberechungen = 1;
+    int maxlastbestroutechange = 10000;
     vector<pair<float, float>> citylits = dj38;
     float lenofbesttour = soldj38;
     listofdurations.resize(anzberechungen); 
@@ -546,15 +566,15 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        //ac region(qa194, solqa194, 2048);
+        //ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        ac region(qa194, solqa194, 4096);
 
         auto start = chrono::high_resolution_clock::now();
 
         int i = -1;
         while (!region.issolopt() && lastbestroutechange<maxlastbestroutechange) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
@@ -565,22 +585,26 @@ int main(void) {
             } else {
                 lastbestroutechange++;
             }
-            
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
-            if ( true) { // newbestroutlen < lenofbesttour
+            if (true) { // true // newbestroutlen < lenofbesttour
                 cout << "bestroute: [";
                 for (const auto& element : bestrout) {
                     cout << element << ", ";
                 }
                 cout << endl;
             }
+            */
+            if (newbestroutlen > bestroutlen) {
+                break;
+            }
             
             if (lastbestroutechange >= maxlastbestroutechange) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }
         }
-        /*
+        
         bestroutlen = region.getbestroutelen();
         cout << "bestroutelen: " << bestroutlen << endl;
         bestrout = region.getbestroute();
@@ -589,6 +613,7 @@ int main(void) {
             cout << element << ", ";
         }
         cout << endl;
+        /*
         cout << "sorted bestroute: ";
         sort(bestrout.begin(), bestrout.end());
         for (const auto& element : bestrout) {
