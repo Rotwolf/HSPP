@@ -40,7 +40,7 @@ __global__ void tour_konstruktions_kernel(
         bool* visited = new bool[cldim]();                          // evt. shared memmory nutzen
         for (int i = 0; i < cldim; i++) visited[i] = false;
         float myrandstart = curand_uniform(my_curandstate+idx);
-        myrandstart *= (cldim -1 +0.99999999);
+        myrandstart *= (cldim -1 +0.99999);
         int start = (int)truncf(myrandstart);
         route[0] = start;
         visited[start] = true;
@@ -85,7 +85,11 @@ __global__ void tour_konstruktions_kernel(
                 //add error msg? 
             //}
             free(probabilities);
-
+            if (next == -1 && r > sum_prob) {       // prüft, ob das Problem die ungenauigkeit der Errechneten Wahrscheinlichkeiten ist.
+                int j = cldim-1;
+                while (visited[j]) j--;
+                next = j;
+            }
             route[i] = next;
             visited[next] = true;
         }
@@ -380,7 +384,7 @@ int main(void) {
     float solrat783 = 8806;
 
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 30;
+    int anzberechungen = 1;
     int maxlastbestroutechange = 3000;
     vector<pair<float, float>> citylits = dj38;
     float lenofbesttour = soldj38;
@@ -391,8 +395,8 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        //ac region(qa194, solqa194, 2048);
+        //ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        ac region(qa194, solqa194, 1024);
         //ac region(cl1, 2846);
 
         auto start = chrono::high_resolution_clock::now();
@@ -400,7 +404,7 @@ int main(void) {
         int i = -1;
         while (!region.issolopt() && lastbestroutechange<maxlastbestroutechange) {
             i++;
-            cout <<  i << endl; 
+            //cout <<  i << endl; 
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
@@ -411,7 +415,7 @@ int main(void) {
             } else {
                 lastbestroutechange++;
             }
-            
+            /*
             cout << "lastchange was: * " << lastbestroutechange << " * Iterations ago." << endl;
             bestrout = region.getbestroute();
             if ( true) { // newbestroutlen < lenofbesttour
@@ -421,13 +425,17 @@ int main(void) {
                 }
                 cout << endl;
             }
+            */
+            if (newbestroutlen > bestroutlen) {
+                break;
+            }
             
             if (lastbestroutechange >= maxlastbestroutechange) {
                 cout << "[SAD] ACO broke because of the max iterations when bestrout doesnt change." << endl;
             }
         }
-        /*
-        bestroutlen = region.getbestroutelen();
+        
+        //bestroutlen = region.getbestroutelen();
         cout << "bestroutelen: " << bestroutlen << endl;
         bestrout = region.getbestroute();
         cout << "bestroute: [";
@@ -435,6 +443,7 @@ int main(void) {
             cout << element << ", ";
         }
         cout << endl;
+        /*
         cout << "sorted bestroute: ";
         sort(bestrout.begin(), bestrout.end());
         for (const auto& element : bestrout) {
