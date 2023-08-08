@@ -206,7 +206,47 @@ __global__ void pheromon_evaporation_kernel(
 
 }
 
-__global__ void pheromon_aktualisierungs_kernel(
+__global__ void pheromon_aktualisierungs_kernel( 
+    int cldim,
+    int lenofbestwaysofar,
+    int *bestroute,
+    float *cost, 
+    float *phero,
+    int *route
+    ) {
+    extern __shared__ int partial_len[];
+    __shared__ float pherodelta;
+    int ameisenid = blockIdx.x;
+    int schrittid = threadIdx.x;
+    int stadt_i, stadt_j; 
+    if (schrittid == 0) {
+        stadt_i = route[ameisenid*cldim + cldim - 1];
+        stadt_j = route[ameisenid*cldim];
+    } else {
+        stadt_i = route[ameisenid*cldim + schrittid - 1];
+        stadt_j = route[ameisenid*cldim + schrittid];
+    }
+
+    partial_len[schrittid] = cost[stadt_i * cldim + stadt_j];
+    __syncthreads();
+    if (schrittid == 0) {
+        float len = 0;
+        for (int i = 0; i < cldim; i++) len += partial_len[i];
+        if (len < lenofbestwaysofar) {
+            for (int i = 0; i < cldim; i++) {
+                bestroute[i] = route[ameisenid*cldim + i];
+            }
+            lenofbestwaysofar = len;
+        }
+        pherodelta = 1/len;
+    }
+    __syncthreads();
+    atomicAdd(&phero[stadt_i * cldim + stadt_j], pherodelta);
+    atomicAdd(&phero[stadt_j * cldim + stadt_i], pherodelta);
+}
+
+/*
+__global__ void pheromon_aktualisierungs_kernel_old(
     int N, 
     int cldim,
     int lenofbestwaysofar,
@@ -240,6 +280,7 @@ __global__ void pheromon_aktualisierungs_kernel(
         phero[route[antid*cldim]*cldim+route[antid*cldim + cldim-1]] += nlen;   
     }
 }
+*/
 
 vector<pair<float, float>> parseTSPFile(const string& filenameshort) {
     vector<pair<float, float>> coordinates;
@@ -360,7 +401,7 @@ class ac {
             cudaDeviceSynchronize();
             pheromon_evaporation_kernel<<<cldim, cldim>>>(p,d_phero);
             cudaDeviceSynchronize(); //?
-            pheromon_aktualisierungs_kernel<<<1,1>>>(N, cldim, lenofbestwaysofar, d_bestwaysofar, d_cost, d_phero, d_route);
+            pheromon_aktualisierungs_kernel<<<blocks, block_size, cldim*sizeof(int)>>>(cldim, lenofbestwaysofar, d_bestwaysofar, d_cost, d_phero, d_route);
             cudaMemcpy(bestwaysofar, d_bestwaysofar, cldim*sizeof(int), cudaMemcpyDeviceToHost);
 
             vbestwaysofar.clear();
