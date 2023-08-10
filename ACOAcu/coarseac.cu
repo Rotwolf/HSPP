@@ -411,7 +411,7 @@ int main(void) {
     for (int i = 0; i < coloniesize.size(); i++) {
 
         int anzberechungen = 30;
-        vector<pair<float, float>> citylits = rat783;
+        vector<pair<float, float>> citylits = qa194;
         float p = 0.5;
         vector<chrono::duration<float>> listofdurations;
         listofdurations.resize(anzberechungen);
