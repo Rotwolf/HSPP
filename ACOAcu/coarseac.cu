@@ -14,6 +14,16 @@
 
 using namespace std;
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 __global__ void setup_kernel(curandState *state, int N, unsigned long long seed){
 
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
@@ -33,30 +43,37 @@ __global__ void tour_konstruktions_kernel(
     int *d_route
     ) {
 
+    extern __shared__ int s[];
+    int* route = s;
+    float* probabilities = (float*)&route[cldim*blockDim.x];
+    bool* visited = (bool*)&probabilities[cldim*blockDim.x];
+
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
+    int tid = threadIdx.x;
   
     for (int j = idx; j<N; j += blockDim.x * gridDim.x) {
-        int *route = (int *)malloc(cldim*sizeof(int));              // evt. shared memmory nutzen
-        bool* visited = new bool[cldim]();                          // evt. shared memmory nutzen
-        for (int i = 0; i < cldim; i++) visited[i] = false;
+        for (int i = 0; i < cldim; i++) visited[tid*cldim+i] = false;
         float myrandstart = curand_uniform(my_curandstate+idx);
         myrandstart *= (cldim -1 +0.99999);
         int start = (int)truncf(myrandstart);
-        route[0] = start;
-        visited[start] = true;
+        route[tid*cldim] = start;
+        visited[tid*cldim+start] = true;
+        probabilities[tid*cldim+start] = 0;
         for (int i = 1; i < cldim-1; i++) {
-            int current = route[i-1];
+            int current = route[tid*cldim+i-1];
+//if (idx == 0) printf("current: %u \n", current);
             float sum = 0;
-            float* probabilities = new float[cldim]();
             for (int j = 0; j < cldim; j++) {
-                if (!visited[j]) {
-                    probabilities[j] = __powf(phero[current*cldim+j]+0.1E-30, alpha) * __powf(1./cost[current*cldim+j], beta);
-                    sum += probabilities[j];
+                if (!visited[tid*cldim+j]) {
+                    probabilities[tid*cldim+j] = __powf(phero[current*cldim+j]+0.1E-28, alpha) * __powf(1./(cost[current*cldim+j]+0.1E-3), beta);
+//if (idx == 0) printf("index: %f, index %f\n", 1./(cost[current*cldim+j]+0.1E-3), (float)cost[current*cldim+j]);
+                    sum += probabilities[tid*cldim+j];
                 }
             }
+//if (idx == 0) printf("sum: %f \n", sum); if (sum == INFINITY) return;
             for (int j = 0; j < cldim; j++) {
-                if (!visited[j]) {
-                    probabilities[j] /= sum;
+                if (!visited[tid*cldim+j]) {
+                    probabilities[tid*cldim+j] /= sum;
                 }
             }
             float r = curand_uniform(my_curandstate+idx);
@@ -64,7 +81,7 @@ __global__ void tour_konstruktions_kernel(
             float sum_prob = 0;
             int next = -1;
             for (int j = 0; j < cldim; j++) {
-                sum_prob += probabilities[j];
+                sum_prob += probabilities[tid*cldim+j];
                 if (r <= sum_prob) {
                     next = j;
                     break;
@@ -84,24 +101,21 @@ __global__ void tour_konstruktions_kernel(
             //if (next == -1) { 
                 //add error msg? 
             //}
-            free(probabilities);
             if (next == -1 && r > sum_prob) {       // prüft, ob das Problem die ungenauigkeit der Errechneten Wahrscheinlichkeiten ist.
                 int j = cldim-1;
-                while (visited[j]) j--;
+                while (visited[tid*cldim+j]) j--;
                 next = j;
             }
-            route[i] = next;
-            visited[next] = true;
+//if (idx == 0) printf("tid: %u, next: %u, sumprob: %f, r: %f \n", tid, next, sum_prob, r);
+            route[tid*cldim+i] = next;
+            visited[tid*cldim+next] = true;
+            probabilities[tid*cldim+next] = 0;
         }
         int i = 0;
-        while (visited[i]) i++;
-        route[cldim-1] = i;
+        while (visited[tid*cldim+i]) i++;
+        route[tid*cldim+cldim-1] = i;
         //visited[i] = true;
-
-        for (int i = 0; i < cldim; i++) d_route[idx*cldim+i] = route[i];
-
-        free(route);
-        free(visited);
+        for (int i = 0; i < cldim; i++) d_route[idx*cldim+i] = route[tid*cldim+i];
     }
 }
 
@@ -245,35 +259,31 @@ class ac {
             lenofbestwaysofar = calulate_way_from_route(vbestwaysofar);
         }
         void initialisiereGPU() {
-            cudaMalloc(&d_state, N*sizeof(curandState));
-            block_size = 64; // bei dj38 eine halbe sekunde langsamer mit 32, 8 ist warum auch immer schneller
+            gpuErrchk(cudaMalloc(&d_state, N*sizeof(curandState)));
+            block_size = 4; // bei dj38 eine halbe sekunde langsamer mit 32, 8 ist warum auch immer schneller
             blocks = (N / block_size) + (N % block_size == 0 ? 0:1); // its not clean dividable, add +1, else nothing works
             setup_kernel<<<blocks,block_size>>>(d_state, N, seed);
 
-            cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(int));
-            cudaMemcpy(d_cost, cost, cldim*cldim*sizeof(int), cudaMemcpyHostToDevice);
-            cudaMalloc((void **) &d_phero, cldim*cldim*sizeof(float));
-            cudaMemcpy(d_phero, phero, cldim*cldim*sizeof(float), cudaMemcpyHostToDevice);
-            cudaMalloc((void **) &d_bestwaysofar, cldim*sizeof(int));
-            cudaMemcpy(d_bestwaysofar, bestwaysofar, cldim*sizeof(int), cudaMemcpyHostToDevice);
-            cudaMalloc((void **) &d_route, N*cldim*sizeof(int));
+            gpuErrchk(cudaMalloc((void **) &d_cost, cldim*cldim*sizeof(int)));
+            gpuErrchk(cudaMemcpy(d_cost, cost, cldim*cldim*sizeof(int), cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMalloc((void **) &d_phero, cldim*cldim*sizeof(float)));
+            gpuErrchk(cudaMemcpy(d_phero, phero, cldim*cldim*sizeof(float), cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMalloc((void **) &d_bestwaysofar, cldim*sizeof(int)));
+            gpuErrchk(cudaMemcpy(d_bestwaysofar, bestwaysofar, cldim*sizeof(int), cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMalloc((void **) &d_route, N*cldim*sizeof(int)));
         }
         void oneIteration(float p) {
             //kernel call
-            tour_konstruktions_kernel<<<blocks,block_size>>>(d_state, N, cldim, alpha, beta, d_cost, d_phero, d_route);
-            cudaDeviceSynchronize();
+            //cout << blocks << endl;
+            //cout << block_size << endl;
+            //cout << (cldim*block_size*sizeof(int)+cldim*block_size*sizeof(float)+cldim*block_size*sizeof(bool)) << endl;
+            tour_konstruktions_kernel<<<blocks, block_size, cldim*block_size*sizeof(int)+cldim*block_size*sizeof(float)+cldim*block_size*sizeof(bool)>>>(d_state, N, cldim, alpha, beta, d_cost, d_phero, d_route);
+            gpuErrchk(cudaPeekAtLastError());
+            gpuErrchk(cudaDeviceSynchronize());
             pheromon_aktualisierungs_kernel<<<1,1>>>(p, N, cldim, lenofbestwaysofar, d_bestwaysofar, d_cost, d_phero, d_route);
-            cudaMemcpy(bestwaysofar, d_bestwaysofar, cldim*sizeof(int), cudaMemcpyDeviceToHost);
-
-            vbestwaysofar.clear();
-            for (int i = 0; i < cldim; i++) {
-                vbestwaysofar.push_back(bestwaysofar[i]);
-            }
-            lenofbestwaysofar = calulate_way_from_route(vbestwaysofar);
-            if (lenofbestwaysofar <= lenofbestway) {
-                solisopt = true; 
-            }
-
+            gpuErrchk(cudaPeekAtLastError());   
+            gpuErrchk(cudaMemcpy(bestwaysofar, d_bestwaysofar, cldim*sizeof(int), cudaMemcpyDeviceToHost));
+            
             /*
             cudaMemcpy(cost, d_cost, cldim*cldim*sizeof(int), cudaMemcpyDeviceToHost);
             cudaMemcpy(phero, d_phero, cldim*cldim*sizeof(float), cudaMemcpyDeviceToHost);
@@ -289,13 +299,25 @@ class ac {
             */
             /*
             int* route = (int *)malloc(N*cldim*sizeof(int));
-            cudaMemcpy(route, d_route, N*cldim*sizeof(int), cudaMemcpyDeviceToHost);
+            gpuErrchk(cudaMemcpy(route, d_route, N*cldim*sizeof(int), cudaMemcpyDeviceToHost));
             cout << "route: " << endl << "[";
             for (int i = 0; i < N*cldim; i++) {
                 cout << " " << route[i] << ",";
             }
             cout << "]" << endl;
             */
+
+            vbestwaysofar.clear();  
+            for (int i = 0; i < cldim; i++) {
+                vbestwaysofar.push_back(bestwaysofar[i]);
+            }
+
+            lenofbestwaysofar = calulate_way_from_route(vbestwaysofar);
+            
+            if (lenofbestwaysofar <= lenofbestway) {
+                solisopt = true; 
+            }
+
         }
         int calulate_way_from_route(vector<int> route) {
             int way = 0;
@@ -341,7 +363,7 @@ class ac {
         bool issolopt() {
             return solisopt;
         }
-        void freeall(void) {
+        void freeall() {
             free(cost);
             free(phero);
             free(bestwaysofar);
@@ -383,8 +405,65 @@ int main(void) {
     vector<pair<float, float>> rat783 = parseTSPFile("rat783");;
     int solrat783 = 8806;
 
+
+    vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
+
+    for (int i = 0; i < coloniesize.size(); i++) {
+
+        int anzberechungen = 30;
+        vector<pair<float, float>> citylits = rat783;
+        float p = 0.5;
+        vector<chrono::duration<float>> listofdurations;
+        listofdurations.resize(anzberechungen);
+
+        vector<int> bestrout;
+        int bestroutlen = INT_MAX;
+        ac region(citylits, 0, coloniesize[i]);
+
+        for (int j = 0; j < anzberechungen; j++) {
+            auto start = chrono::high_resolution_clock::now();
+
+            region.doIteration(p);
+
+            auto end = chrono::high_resolution_clock::now();
+            listofdurations[j] = end - start;
+
+            bestroutlen = region.getbestroutelen();
+            bestrout = region.getbestroute();
+            
+        }
+        
+        cout << "bestroutelen: " << bestroutlen << endl;
+        /*
+        bestrout = region.getbestroute();
+        cout << "bestroute: [";
+        for (const auto& element : bestrout) {
+            cout << element << ", ";
+        }
+        cout << endl;
+        */
+        region.freeall();
+
+        float summe = 0.0;
+        for (int j = 0; j < anzberechungen; j++) {
+            summe += listofdurations[j].count();
+        }
+
+        float avg = summe / listofdurations.size();
+        cout << "Die Durchschnittliche Ausfuehrungszeit fuer " << coloniesize[i] << " betraegt: " << avg << " Sekunden." << endl;
+        /*
+        cout << "suration values: ";
+        for (const auto& element : listofdurations) {
+            cout << element.count() << " ";
+        }
+        cout << endl;
+        */
+    }
+
+    return 0;
+/*
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 1;
+    int anzberechungen = 30;
     int maxlastbestroutechange = 3000;
     vector<pair<float, float>> citylits = dj38;
     int lenofbesttour = soldj38;
@@ -395,8 +474,8 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        //ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        ac region(qa194, solqa194, 1024);
+        ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        //ac region(qa194, solqa194, 1024);
         //ac region(cl1, 2846);
 
         auto start = chrono::high_resolution_clock::now();
@@ -408,7 +487,7 @@ int main(void) {
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
-            cout << "bestroutlen: " << newbestroutlen << endl;
+            //cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
@@ -426,6 +505,7 @@ int main(void) {
                 cout << endl;
             }
             */
+/*
             if (newbestroutlen > bestroutlen) {
                 break;
             }
@@ -451,6 +531,7 @@ int main(void) {
         }
         cout << endl;
         */
+/*
         region.freeall();
         
         auto end = chrono::high_resolution_clock::now();
@@ -468,5 +549,5 @@ int main(void) {
     cout << "Die Durchschnittliche Ausfuehrungszeit betraegt: " << avg << " Sekunden." << endl;
 
     return 0;
+*/
 }   
-

@@ -150,12 +150,16 @@ __global__ void tour_konstruktions_kernel(
         __syncthreads();
         for (int i = 1; i < cldim-1; i++) {
             int aktuellestadt = route[i-1];
-            probabilities[stadtid] = __powf(phero[aktuellestadt*cldim+stadtid]+0.1E-30, alpha) * __powf(1./cost[aktuellestadt*cldim+stadtid], beta);
+            if (!visited[stadtid]) {
+                probabilities[stadtid] = __powf(phero[aktuellestadt*cldim+stadtid]+0.1E-28, alpha) * __powf(1./(cost[aktuellestadt*cldim+stadtid]+0.1E-3), beta);
+            } else {
+                probabilities[stadtid] = 0;
+            }
             __syncthreads();
             if (stadtid == 0) {
                 sum = 0;
                 for (int j = 0; j < cldim; j++) {
-                    if (!visited[j]) sum += probabilities[j];
+                    sum += probabilities[j];
                 }
             }
             __syncthreads();
@@ -167,12 +171,10 @@ __global__ void tour_konstruktions_kernel(
                 float sum_prob = 0;
                 int next = -1;
                 for (int j = 0; j < cldim; j++) {
-                    if (!visited[j]) {
-                        sum_prob += probabilities[j];
-                        if (r <= sum_prob) {
-                            next = j;
-                            break;
-                        }
+                    sum_prob += probabilities[j];
+                    if (r <= sum_prob) {
+                        next = j;
+                        break;
                     }
                 }
                 if (next == -1 && r > sum_prob) {       // prüft, ob das Problem die ungenauigkeit der Errechneten Wahrscheinlichkeiten ist.
@@ -486,8 +488,65 @@ int main(void) {
     vector<pair<float, float>> rat783 = parseTSPFile("rat783");;
     int solrat783 = 8806;
 
+
+    vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
+
+    for (int i = 0; i < coloniesize.size(); i++) {
+
+        int anzberechungen = 30;
+        vector<pair<float, float>> citylits = lin318;
+        float p = 0.5;
+        vector<chrono::duration<float>> listofdurations;
+        listofdurations.resize(anzberechungen);
+
+        vector<int> bestrout;
+        int bestroutlen = INT_MAX;
+        ac region(citylits, 0, coloniesize[i]);
+
+        for (int j = 0; j < anzberechungen; j++) {
+            auto start = chrono::high_resolution_clock::now();
+
+            region.doIteration(p);
+
+            auto end = chrono::high_resolution_clock::now();
+            listofdurations[j] = end - start;
+
+            bestroutlen = region.getbestroutelen();
+            bestrout = region.getbestroute();
+            
+        }
+        
+        cout << "bestroutelen: " << bestroutlen << endl;
+        /*
+        bestrout = region.getbestroute();
+        cout << "bestroute: [";
+        for (const auto& element : bestrout) {
+            cout << element << ", ";
+        }
+        cout << endl;
+        */
+        region.freeall();
+
+        float summe = 0.0;
+        for (int j = 0; j < anzberechungen; j++) {
+            summe += listofdurations[j].count();
+        }
+
+        float avg = summe / listofdurations.size();
+        cout << "Die Durchschnittliche Ausfuehrungszeit fuer " << coloniesize[i] << " betraegt: " << avg << " Sekunden." << endl;
+        /*
+        cout << "suration values: ";
+        for (const auto& element : listofdurations) {
+            cout << element.count() << " ";
+        }
+        cout << endl;
+        */
+    }
+
+    return 0;
+/*
     vector<chrono::duration<float>> listofdurations;
-    int anzberechungen = 1;
+    int anzberechungen = 30;
     int maxlastbestroutechange = 3000;
     vector<pair<float, float>> citylits = dj38;
     int lenofbesttour = soldj38;
@@ -498,8 +557,8 @@ int main(void) {
         int bestroutlen = INT_MAX;
         int newbestroutlen;
         int lastbestroutechange = 0;
-        //ac region(citylits, lenofbesttour, 2048); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
-        ac region(qa194, solqa194, 1024);
+        ac region(citylits, lenofbesttour, 1024); //8192,4096,2048,1024,256  // Change the used TSP-Instance here (and dont forget to change the soltion length: solxxxx)
+        //ac region(qa194, solqa194, 1024);
 
         auto start = chrono::high_resolution_clock::now();
 
@@ -510,7 +569,7 @@ int main(void) {
             region.doIteration(0.5);
 
             newbestroutlen = region.getbestroutelen();
-            cout << "bestroutlen: " << newbestroutlen << endl;
+            //cout << "bestroutlen: " << newbestroutlen << endl;
             if (newbestroutlen < bestroutlen) {
                 bestroutlen = newbestroutlen;
                 lastbestroutechange = 0;
@@ -528,6 +587,7 @@ int main(void) {
                 cout << endl;
             }
             */
+/*
             if (newbestroutlen > bestroutlen) {
                 break;
             }
@@ -553,6 +613,7 @@ int main(void) {
         }
         cout << endl;
         */
+/*
         region.freeall();
         
         auto end = chrono::high_resolution_clock::now();
@@ -569,6 +630,6 @@ int main(void) {
     float avg = summe / listofdurations.size();
     cout << "Die Durchschnittliche Ausfuehrungszeit betraegt: " << avg << " Sekunden." << endl;
 
-    return 0;
+    return 0;*/
 }   
 
