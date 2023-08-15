@@ -1,5 +1,5 @@
 .vscode/
-cuda-samples/
 *.exe
 *.exp
 *.lib
+__pycache__/
