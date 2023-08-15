@@ -405,7 +405,44 @@ int main(void) {
     vector<pair<float, float>> rat783 = parseTSPFile("rat783");;
     int solrat783 = 8806;
 
+ 
+    vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
 
+    for (int i = 0; i < coloniesize.size(); i++) {
+
+        int anzberechungen = 30;
+        vector<int> mlength;
+        mlength.resize(anzberechungen);
+
+        for (int k = 0; k < anzberechungen; k++) { 
+
+            int anziter = 30;
+            vector<pair<float, float>> citylits = lin318;
+            float p = 0.5;
+
+            int bestroutlen = INT_MAX;
+            ac region(citylits, 0, coloniesize[i]);
+
+            for (int j = 0; j < anziter; j++) {
+                region.doIteration(p);      
+            }
+            bestroutlen = region.getbestroutelen(); 
+            //cout << "bestroutelen: " << bestroutlen << endl;
+            mlength[k] = bestroutlen;
+            region.freeall();
+      
+        }
+
+        float summe = 0.0;
+        for (int j = 0; j < anzberechungen; j++) {
+            summe += mlength[j];
+        }
+        float avg = summe / mlength.size();
+        cout << "Die Durchschnittliche routenlaenge fuer " << coloniesize[i] << " betraegt: " << avg << endl;
+    }
+
+    return 0;
+/*
     vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
 
     for (int i = 0; i < coloniesize.size(); i++) {
@@ -442,7 +479,7 @@ int main(void) {
         }
         cout << endl;
         */
-        region.freeall();
+ /*       region.freeall();
 
         float summe = 0.0;
         for (int j = 0; j < anzberechungen; j++) {
@@ -458,7 +495,7 @@ int main(void) {
         }
         cout << endl;
         */
-    }
+/*    }
 
     return 0;
 /*
