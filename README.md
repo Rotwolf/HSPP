@@ -3,8 +3,8 @@
 
 ### Python in `ACOApython`
 
-&rarr; Brutforce Lösung des TSP
-&rarr; ACO implemntierung
+&rarr; Brutforce Lösung des TSP  
+&rarr; ACO implemntierung  
 &rarr; Visualisieurng in `main`
   
 Alles sequenziell.
@@ -15,8 +15,8 @@ Alles sequenziell.
 
 ### C++/C und CUDA in `ACOAcu`
 
-&rarr; Grobkörnig in `coarseac`
-&rarr; Feinkörnig in `fineac`
+&rarr; Grobkörnig in `coarseac`  
+&rarr; Feinkörnig in `fineac`  
 &rarr; Feinkörnig + parallele Pheromonaktualisierung in `fineplusac`
 
 Weitere Verionen von Grobkörnig in old.
