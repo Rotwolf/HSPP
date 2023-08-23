@@ -19,4 +19,5 @@ Alles sequenziell.
 &rarr; Feinkörnig in `fineac`  
 &rarr; Feinkörnig + parallele Pheromonaktualisierung in `fineplusac`
 
-Weitere Verionen von Grobkörnig in old.
+Weitere Verionen von Grobkörnig und in `old`.
+Unkommentierte Versionen mit auskommentierten zusätzlichen Code in `nodoc`.
