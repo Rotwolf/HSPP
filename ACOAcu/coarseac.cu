@@ -142,7 +142,7 @@ __global__ void pheromon_aktualisierungs_kernel( // seriell, wird nur von einem 
 vector<pair<float, float>> parseTSPFile(const string& filenameshort) {// utility
     vector<pair<float, float>> coordinates;
 
-    string filename = "C:/Users/jonie/Desktop/hausarbeit/testtsps/" + filenameshort +".tsp";
+    string filename = "C:/Users/jonie/Desktop/hauptseminarpp/hausarbeit/testtsps/" + filenameshort +".tsp";
     ifstream file(filename);
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
@@ -347,7 +347,7 @@ int main(void) {
 
     vector<int> coloniesize = {1024, 2048, 4096, 8192};
 
-
+/*
     // Berechnung der Durchschnittslänge
     for (int i = 0; i < coloniesize.size(); i++) {
 
@@ -358,7 +358,7 @@ int main(void) {
         for (int k = 0; k < anzberechungen; k++) { 
 
             int anziter = 30;
-            vector<pair<float, float>> citylits = lin318;
+            vector<pair<float, float>> citylits = dj38;
             float p = 0.5;
 
             int bestroutlen = INT_MAX;
@@ -381,8 +381,8 @@ int main(void) {
         float avg = summe / mlength.size();
         cout << "Die Durchschnittliche routenlaenge fuer " << coloniesize[i] << " betraegt: " << avg << endl;
     }
+*/
 
-/*
     // Berechnung der Durchschnittszeit
     for (int i = 0; i < coloniesize.size(); i++) {
 
@@ -433,6 +433,6 @@ int main(void) {
         cout << endl;
         
     }
-*/  
+
     return 0;
 } 

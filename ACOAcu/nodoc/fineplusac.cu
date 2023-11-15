@@ -296,7 +296,7 @@ __global__ void pheromon_aktualisierungs_kernel_old(
 vector<pair<float, float>> parseTSPFile(const string& filenameshort) {
     vector<pair<float, float>> coordinates;
 
-    string filename = "C:/Users/jonie/Desktop/hausarbeit/testtsps/" + filenameshort +".tsp";
+    string filename = "C:/Users/jonie/Desktop/hauptseminarpp/hausarbeit/testtsps/" + filenameshort +".tsp";
     ifstream file(filename);
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
@@ -560,7 +560,7 @@ int main(void) {
 
     vector<pair<float, float>> rat783 = parseTSPFile("rat783");;
     int solrat783 = 8806;
-/*
+
     vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
 
     for (int i = 0; i < coloniesize.size(); i++) {
@@ -572,7 +572,7 @@ int main(void) {
         for (int k = 0; k < anzberechungen; k++) { 
 
             int anziter = 30;
-            vector<pair<float, float>> citylits = lin318;
+            vector<pair<float, float>> citylits = dj38;
             float p = 0.5;
 
             int bestroutlen = INT_MAX;
@@ -597,8 +597,8 @@ int main(void) {
     }
 
     return 0;
-*/
 
+/*
     vector<int> coloniesize = {1024, 2048, 4096, 8192}; //8192,4096,2048,1024
 
     for (int i = 0; i < coloniesize.size(); i++) {
@@ -635,7 +635,7 @@ int main(void) {
         }
         cout << endl;
         */
-        region.freeall();
+/*      region.freeall();
 
         float summe = 0.0;
         for (int j = 0; j < anzberechungen; j++) {
@@ -651,7 +651,7 @@ int main(void) {
         }
         cout << endl;
         */
-    }
+/*  }
 
     return 0;
 
